@@ -1,2 +1,9 @@
 This is a simple ruby script to download hongkong comic long hu men.
 Just change the range of chapters at the bottom of comic downloader to choose your chapters
+
+Got some dependencies, need to install ruby and the following ruby gem files
+require 'net/http'
+require 'addressable/uri'
+require 'rubygems'
+require 'eventmachine'
+require 'em-http'
