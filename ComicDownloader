@@ -1,0 +1,112 @@
+# encoding: utf-8
+require 'net/http'
+require 'addressable/uri'
+require 'rubygems'
+require 'eventmachine'
+require 'em-http'
+
+def download_image(sample_image,filename)
+
+  http = EM::HttpRequest.new(sample_image).get
+  @connection +=1
+  http.errback do
+    puts "Connection error: #{http.error}"
+    @connection -= 1
+    if @connection == 0
+      EM.stop
+    end
+  end
+
+  http.callback do
+    @connection -= 1
+    if http.response_header.status == 200
+      #  puts "Success!"
+      # puts http.response
+      open(filename, "wb") { |file|
+        file.write(http.response)
+      }
+    else
+      puts "Unexpected status code: #{http.response_header.status}"
+    end
+    if @connection == 0
+      EM.stop
+    end
+  end
+end
+
+
+def extract_base_url(line)
+  url_start = line.index("url=") + 4
+  url_end = line.index("/\";")
+  line[url_start..url_end]
+end
+
+def extract_image_url(line)
+  image_start = line.index("'")+1
+  image_end = line.index("';")-1
+  line[image_start..image_end]
+end
+
+
+def download_images(js_url,current_no)
+  url = URI.parse(js_url)
+  req = Net::HTTP::Get.new(url.path)
+  res = Net::HTTP.start(url.host, url.port) { |http|
+    http.request(req)
+  }
+
+  line_no = 1
+  current_page = 0
+  base_image_url = nil
+  @connection = 0
+  EM.run do
+    res.body.each_line do |line|
+      if line.index("picDir")!=nil
+        base_image_url = extract_base_url(line)
+        create_directory(current_no.to_s)
+      end
+
+      if base_image_url!=nil
+        if line.index("picSrc[")!=nil
+          image_url = extract_image_url(line)
+          full_url = "#{base_image_url}#{image_url}"
+          value =  image_url[/-([0-9]+.jpg)/,1]
+          if value
+            puts value
+            current_page = value[0..value.size-4].to_i
+            puts current_page
+            filepath = "#{current_no.to_s}/#{value}"
+            download_image(full_url,filepath)
+          else
+            current_page = current_page + 1
+            puts current_page
+            current_3_digit = "%03d" % current_page
+            filepath = "#{current_no.to_s}/#{current_3_digit.to_s}.jpg"
+            download_image(full_url,filepath)
+          end
+        end
+      end
+
+#create a new line
+      line_no = line_no+1
+    end
+  end
+end
+
+def download_longhumen(start_number,end_number)
+  current_no = start_number
+  while current_no<=end_number
+    current_3_digit = "%03d" % current_no
+    js_url = "http://www.zcoco.cn/kc-bt/%E6%97%A7%E8%91%97%E9%BE%99%E8%99%8E%E9%97%A8/%E6%97%A7%E8%91%97%E9%BE%99%E8%99%8E%E9%97%A8_#{current_3_digit}.js"
+    puts js_url
+    download_images(js_url,current_no)
+    current_no = current_no + 1
+  end
+end
+
+
+def create_directory(directory)
+  Dir::mkdir(directory) unless File.exists?(directory)
+end
+
+download_longhumen(1001,1100)
